@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>友谊关系质量测验</title>
+    <!-- 引入 jsPsych -->
+    <script src="https://unpkg.com/jspsych@7.3.3"></script>
+    <script src="https://unpkg.com/@jspsych/plugin-html-button-response@1.1.2"></script>
+    <script src="https://unpkg.com/@jspsych/plugin-survey-likert@1.1.2"></script>
+    <link href="https://unpkg.com/jspsych@7.3.3/css/jspsych.css" rel="stylesheet" type="text/css" />
+    
+    <!-- 引入 Chart.js 用于绘制雷达图 -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        /* 网易云风格美化 */
+        body {
+            background-color: #2b2b2b;
+            color: #ffffff;
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        }
+        .jspsych-content {
+            background-color: #333;
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            max-width: 800px;
+        }
+        /* 问卷选项样式 */
+        .jspsych-survey-likert-statement { font-size: 18px; margin-bottom: 15px; color: #eee; }
+        .jspsych-survey-likert-opts { color: #aaa; }
+        
+        /* 结果页样式 */
+        .result-container {
+            text-align: center;
+        }
+        .persona-title {
+            font-size: 32px;
+            font-weight: bold;
+            color: #e60026; /* 网易红 */
+            margin-bottom: 10px;
+            text-shadow: 0 0 10px rgba(230, 0, 38, 0.5);
+        }
+        .persona-desc {
+            font-size: 18px;
+            color: #ddd;
+            margin-bottom: 30px;
+            font-style: italic;
+        }
+        #radarChart {
+            max-width: 500px;
+            margin: 0 auto;
+        }
+        .jspsych-btn {
+            background-color: #e60026;
+            border-color: #e60026;
+        }
+    </style>
+</head>
+<body></body>
+<script>
+    // 初始化 jsPsych
+    const jsPsych = initJsPsych({
+        on_finish: function() {
+            // 实验结束时不动作，结果页由最后一个trial展示
+        }
+    });
+
+    const timeline = [];
+
+    // --- 0. 欢迎页 ---
+    const welcome = {
+        type: jsPsychHtmlButtonResponse,
+        stimulus: `
+            <div style="margin-bottom:20px;">
+                <h1 style="color:#e60026;">友谊质量罗盘</h1>
+                <p>这是一份关于同伴关系的心理调查。</p>
+                <p>我们将从陪伴、冲突、帮助、安全感、亲密度五个维度分析你们的关系。</p>
+                <p>请根据真实情况作答。</p>
+            </div>
+        `,
+        choices: ['开始测验']
+    };
+    timeline.push(welcome);
+
+    // --- 1. 问卷题目定义 ---
+    const scale_options = ["完全不符合", "不符合", "不确定", "符合", "非常符合"];
+    
+    // 题目列表（按顺序）
+    const questions_text = [
+        "1、我和朋友空闲时都在一起。",
+        "2、我朋友认为有很多有趣的事情等着我们一起去做。",
+        "3、放学后或周末，我和朋友经常去对方家里。",
+        "4、有时我和朋友只是坐在一起聊校园、运动等我们喜欢的话题。",
+        "5、我会和我的朋友打架。",
+        "6、尽管我说不要这样，我的朋友还是会打扰甚至惹怒我。",
+        "7、我和朋友经常争吵。",
+        "8、我和朋友在很多意见上不一致。",
+        "9、如果我忘记吃午餐且没有带钱，我的朋友会借给我。",
+        "10、当我有麻烦的时候，我的朋友会帮助我。",
+        "11、只要我需要，我的朋友就会提供帮助。",
+        "12、如果其他人侵扰我，我的朋友会帮忙。",
+        "13、如果有其他人给我造成了困扰，我的朋友会替我出气。",
+        "14、如果我在学校或者家里遇到问题，我会和我的朋友说起。",
+        "15、如果有一些事情困扰我，我会和我的朋友说，即使是不能和别人说的秘密。",
+        "16、如果我和朋友吵完架后道歉，他依然会生我的气。", // 反向计分
+        "17、如果我和我的朋友做了困扰对方的事情，我们可以轻易弥补。",
+        "18、在我和朋友打架或者争吵后，道完歉一切都会变好。",
+        "19、如果我的朋友搬家了，我会想念她。",
+        "20、和朋友在一起时我很开心。",
+        "21、即使我朋友不在我身边，我还是会想到她。",
+        "22、当我在某些事上表现出色时，我的朋友会为我感到高兴。",
+        "23、有时我的朋友会为我做点什么，或者让我觉得自己很特别。"
+    ];
+
+    // 构建 survey-likert 的 questions 数组
+    let survey_questions = questions_text.map((q, index) => {
+        return { prompt: q, name: `Q${index+1}`, labels: scale_options, required: true };
+    });
+
+    // --- 2. 问卷 Trial ---
+    const survey_trial = {
+        type: jsPsychSurveyLikert,
+        questions: survey_questions,
+        button_label: '查看结果',
+        data: { type: 'survey_response' } // 标记数据以便后续提取
+    };
+    timeline.push(survey_trial);
+
+    // --- 3. 计分与反馈页 ---
+    const feedback = {
+        type: jsPsychHtmlButtonResponse,
+        stimulus: function() {
+            // 获取上一个 trial 的数据
+            const last_data = jsPsych.data.get().last(1).values()[0].response;
+            
+            // 辅助函数：获取分数 (0-4 转为 1-5)
+            // jsPsych Survey Likert 返回的是索引 0-4，我们需要 1-5
+            const getScore = (qIndex) => last_data[`Q${qIndex}`] + 1;
+
+            // --- 计分逻辑 ---
+            
+            // 维度 1: 陪伴 (1-4)
+            let raw_compan = getScore(1) + getScore(2) + getScore(3) + getScore(4);
+            let score_compan = (raw_compan / 20) * 100; // 标准化为 0-100
+
+            // 维度 2: 冲突 (5-8)
+            let raw_conflict = getScore(5) + getScore(6) + getScore(7) + getScore(8);
+            let score_conflict = (raw_conflict / 20) * 100;
+
+            // 维度 3: 帮助 (9-13)
+            let raw_help = getScore(9) + getScore(10) + getScore(11) + getScore(12) + getScore(13);
+            let score_help = (raw_help / 25) * 100;
+
+            // 维度 4: 安全感 (14-18)
+            // 注意：Q16 是反向题。原分 1-5，反向后为 6 - 原始分
+            let q16_rev = 6 - getScore(16);
+            let raw_security = getScore(14) + getScore(15) + q16_rev + getScore(17) + getScore(18);
+            let score_security = (raw_security / 25) * 100;
+
+            // 维度 5: 亲密度 (19-23)
+            let raw_intimacy = getScore(19) + getScore(20) + getScore(21) + getScore(22) + getScore(23);
+            let score_intimacy = (raw_intimacy / 25) * 100;
+
+            // --- 人格判定逻辑 ---
+            let personaName = "";
+            let personaDesc = "";
+            
+            // 计算平均正面得分（排除冲突）
+            let avg_positive = (score_compan + score_help + score_security + score_intimacy) / 4;
+
+            if (score_conflict > 75 && avg_positive > 75) {
+                personaName = "相爱相杀纠缠组";
+                personaDesc = "一边嫌弃，一边不离不弃。你们的关系充满了激情与戏剧性，吵不散的才是真爱。";
+            } else if (score_conflict > 70 && avg_positive < 50) {
+                personaName = "塑料友谊";
+                personaDesc = "也许你们需要稍微保持一点距离，冲突似乎占据了主导地位。";
+            } else if (score_compan > 85 && score_intimacy < 60) {
+                personaName = "绝佳玩伴 (Playmate)";
+                personaDesc = "能一起疯一起玩，但灵魂深处的交流还可以更多一点。";
+            } else if (score_security > 90 && score_help > 90) {
+                personaName = "钢铁后盾";
+                personaDesc = "无论发生什么，你们都是对方最坚实的避风港。安全感爆棚！";
+            } else if (score_intimacy > 90 && score_compan > 90) {
+                personaName = "双生火焰 (Twin Flame)";
+                personaDesc = "灵魂共鸣，默契无间。这种神仙友谊大概率能持续一辈子。";
+            } else if (avg_positive > 80) {
+                personaName = "六边形铁瓷";
+                personaDesc = "全方位无死角的稳固关系，令人羡慕的高质量友谊。";
+            } else {
+                personaName = "君子之交淡如水";
+                personaDesc = "平平淡淡才是真，保持着舒适的社交距离。";
+            }
+
+            // 保存数据供 chart 使用
+            window.chartData = [score_compan, score_conflict, score_help, score_security, score_intimacy];
+            
+            return `
+                <div class="result-container">
+                    <div style="margin-bottom:20px;">
+                        <span style="font-size:14px; color:#aaa;">经大数据（并没有）测算，你们属于：</span>
+                        <div class="persona-title">${personaName}</div>
+                        <div class="persona-desc">“${personaDesc}”</div>
+                    </div>
+                    <canvas id="radarChart"></canvas>
+                </div>
+            `;
+        },
+        choices: ['保存结果 (截图)'],
+        on_load: function() {
+            // 在页面加载完成后绘制图表
+            const ctx = document.getElementById('radarChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'radar',
+                data: {
+                    labels: ['陪伴', '冲突', '帮助', '安全感', '亲密度'],
+                    datasets: [{
+                        label: '友谊维度',
+                        data: window.chartData,
+                        backgroundColor: 'rgba(230, 0, 38, 0.2)', // 网易红背景
+                        borderColor: 'rgba(230, 0, 38, 1)',       // 网易红线条
+                        pointBackgroundColor: '#fff',
+                        pointBorderColor: '#e60026',
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    scales: {
+                        r: {
+                            angleLines: { color: 'rgba(255, 255, 255, 0.1)' },
+                            grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                            pointLabels: {
+                                color: '#fff',
+                                font: { size: 14 }
+                            },
+                            suggestedMin: 0,
+                            suggestedMax: 100,
+                            ticks: { display: false } // 隐藏刻度数字，更像艺术图
+                        }
+                    },
+                    plugins: {
+                        legend: { display: false }
+                    }
+                }
+            });
+        }
+    };
+    timeline.push(feedback);
+
+    // 运行
+    jsPsych.run(timeline);
+</script>
+</html>
